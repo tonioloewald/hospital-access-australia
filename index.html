@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Hospital Access in Australia</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="apple-touch-icon" href="images/icon.png"/>
+    <style>
+      * {
+        font-family: Helvetica Neue, Helvetica, Sans-serif;
+        box-sizing: border-box;
+      }
+
+      .panel {
+        position: absolute;
+        border-radius: 4px;
+        padding: 10px;
+        background: rgba(255,255,255,0.8);
+
+        left: 10px;
+        bottom: 10px;
+      }
+
+      .hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0;">
+      <div id="map" style="width: 100%; height: 100%;"></div>
+      <div class="panel hidden">
+        <label><input type="checkbox" data-event="change:app.showData"> Show Data</label>
+      </div>
+    </div>
+    <script src="https://rawgit.com/tonioloewald/bindinator.js/master/lib/require.js"></script>
+    <script>
+      /* global require, google, console  */
+      'use strict';
+
+      var hospitals;
+      var icus;
+      const circles = [];
+      let getHospitalPlaceData = () => console.warn('not ready');
+      let getICUPlaceData = () => console.warn('not ready');
+
+      const exportJSON = data => {
+        if (data) {
+          window.document.body.innerHTML = `<pre>${JSON.stringify(data, false, 2)}</pre>`;
+        } else {
+          console.error('no data?');
+        }
+      };
+
+      function initMap() {
+        // const uluru = {lat: -25.363, lng: 131.044};
+        // const alice_springs = {lat: -23.69748, lng: 133.88362};
+
+        const map = new google.maps.Map(document.getElementById('map'), {
+          zoom: 5,
+          center: {lat: -28, lng: 135}
+        });
+
+        require.autoPreload().then(() => {
+          const b8r = require('https://rawgit.com/tonioloewald/bindinator.js/master/source/b8r.js');
+          window.b8r = b8r;
+          const service = new google.maps.places.PlacesService(map);
+          let state_index = 0;
+          let hospital_index = 0;
+
+          getHospitalPlaceData = () => {
+            const state = Object.keys(hospitals)[state_index];
+            if (!state) {
+              console.log('finished -- try exportJSON(hospitals)');
+              state_index = 0;
+              hospital_index = 0;
+              return;
+            }
+            const list = hospitals[state];
+            const hospital = list[hospital_index];
+            if (hospital) {
+              hospital_index += 1;
+              if (hospital.googlePlaceData && hospital.googlePlaceData.length) {
+                getHospitalPlaceData();
+                return;
+              }
+              const {institution, location} = hospital;
+              const query = `${institution.trim()}${location ? ', ' + location : ''}, ${state}`;
+              service.textSearch({query}, data => {
+                if (data && data.length) {
+                  console.log(query, 'success');
+                  hospital.googlePlaceData = data;
+                } else {
+                  console.warn(query, 'failed');
+                }
+                setTimeout(getHospitalPlaceData, 1000);
+              });
+            } else {
+              state_index += 1;
+              hospital_index = 0;
+              getHospitalPlaceData();
+            }
+          };
+
+          getICUPlaceData = () => {
+            const icu = icus.find(icu => !icu.googlePlaceData);
+            if (icu) {
+              service.textSearch({query: icu.location}, data => {
+                if (data && data.length) {
+                  console.log(icu.location, 'success');
+                  icu.googlePlaceData = data;
+                } else {
+                  console.warn(icu.location, 'failed');
+                  icu.location = 'failed';
+                }
+                setTimeout(getICUPlaceData, 1000);
+              });
+            } else {
+              icus.forEach(icu => (icu.googlePlaceData !== 'failed') || delete icu.googlePlaceData );
+              console.log('finished -- try exportJSON(icus');
+            }
+          };
+
+          console.log('getHospitalPlaceData() and getICUPlaceData() will attempt to capture missing data');
+
+          b8r.json('cicm-anz-icus.json').then(data =>{
+            icus = data;
+          });
+
+          b8r.register('app', {
+            showData: (_, elt) => {
+              const div = b8r.findOne('.data');
+              if (elt.checked) {
+                div.classList.remove('hidden');
+              } else {
+                div.classList.add('hidden');
+              }
+            }
+          });
+
+          b8r.findOne('.panel').classList.remove('hidden');
+
+          b8r.json('australian-hospitals.json').then(data => {
+            hospitals = data;
+            const heatmapData = [];
+
+            b8r.forEachKey(hospitals, list => {
+              for (let i = 0; i < list.length; i++) {
+                const hospital = list[i];
+                if (hospital.googlePlaceData && hospital.googlePlaceData.length) {
+                  const place = hospital.googlePlaceData[0];
+
+                  // heatmap
+                  // heatmapData.push(new google.maps.LatLng(place.geometry.location.lat, place.geometry.location.lng));
+
+                  // markers
+                  /*
+                  markers.push(new google.maps.Marker({
+                    title: place.name,
+                    position: place.geometry.location,
+                    map: map
+                  }));
+                  */
+
+                  circles.push(new google.maps.Circle({
+                    strokeWeight: 0,
+                    fillColor: '#FF0000',
+                    fillOpacity: 0.5,
+                    map: map,
+                    center: place.geometry.location,
+                    radius: 30000,
+                    }));
+                } else {
+                  console.warn('no place data for', hospital);
+                }
+              }
+            });
+
+            icus.forEach(icu => {
+              if (icu.googlePlaceData && icu.googlePlaceData.length) {
+                const place = icu.googlePlaceData[0];
+
+                // heatmap
+                heatmapData.push(new google.maps.LatLng(place.geometry.location.lat, place.geometry.location.lng));
+              }
+            })
+
+            const heatmap = new google.maps.visualization.HeatmapLayer({ data: heatmapData });
+            heatmap.set('dissipating', false);
+            heatmap.set('radius', 2);
+            heatmap.setMap(map);
+
+            // getHospitalPlaceData();
+          });
+        });
+      }
+    </script>
+    <script async defer
+      src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA9GUTTSQ3iRfB_wTX--O302YEintAVut8&libraries=places,visualization&callback=initMap">
+    </script>
+  </body>
+</html>
