@@ -1,5 +1,9 @@
 # Hospital Access Australia
 
+The goal of this project is to graphically display the distribution of intensive care services in Australia.
+
+As of now, the map displays the position of hospitals as red circles, and ICU availability as a heatmap.
+
 Data used was obtained via:
 
 ### [List of Hospitals in Australia](https://en.wikipedia.org/wiki/List_of_hospitals_in_Australia)
