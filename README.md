@@ -1,5 +1,7 @@
 # Hospital Access Australia
 
+[See demo](https://github.com/tonioloewald/hospital-access-australia)
+
 The goal of this project is to graphically display the distribution of intensive care services in Australia.
 
 As of now, the map displays the position of hospitals as red circles, and ICU availability as a heatmap.
